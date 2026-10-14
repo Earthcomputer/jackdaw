@@ -9,7 +9,7 @@ use std::time::Duration;
 use bevy::camera::RenderTarget;
 use bevy::picking::{
     backend::HitData,
-    events::{Click, Pointer},
+    events::{Pointer, PointerClick},
     pointer::{Location, PointerButton, PointerId},
 };
 use bevy::prelude::*;
@@ -51,7 +51,7 @@ fn open_project(app: &App) -> Option<PathBuf> {
         .map(|root| root.root.clone())
 }
 
-/// Click `button` the way a user does: the `Pointer<Click>` its observer
+/// Click `button` the way a user does: the `PointerClick` its observer
 /// watches for.
 fn click(app: &mut App, button: Entity) {
     let window = app
@@ -62,20 +62,20 @@ fn click(app: &mut App, button: Entity) {
     let target = RenderTarget::Window(WindowRef::Primary)
         .normalize(Some(window))
         .expect("the primary window normalizes");
-    app.world_mut().trigger(Pointer::new(
-        PointerId::Mouse,
-        Location {
-            target,
-            position: Vec2::ZERO,
-        },
-        Click {
-            button: PointerButton::Primary,
-            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-            duration: Duration::ZERO,
-            count: 1,
-        },
-        button,
-    ));
+    app.world_mut().trigger(PointerClick {
+        entity: button,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target,
+                position: Vec2::ZERO,
+            },
+        ),
+        button: PointerButton::Primary,
+        hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+        duration: Duration::ZERO,
+        count: 1,
+    });
     app.update();
 }
 
@@ -322,7 +322,13 @@ fn ticking_navmesh_ticks_physics_and_the_created_game_uses_both() {
         cargo.contains("features = [\"physics\", \"navmesh\", \"terrain\", \"pie\"]"),
         "the game enables both modules' runtime features: {cargo}"
     );
-    assert!(cargo.contains("avian3d = \"0.7\""), "{cargo}");
+    let avian = jackdaw_project_build::modules::ModuleCatalog::builtin()
+        .get("physics")
+        .expect("a physics module")
+        .crates[0]
+        .requirement()
+        .expect("avian3d comes from outside jackdaw");
+    assert!(cargo.contains(&format!("avian3d = {avian}")), "{cargo}");
     assert!(!cargo.contains("jackdaw_multiplayer"), "{cargo}");
     let settings: toml::Table = toml::from_str(
         &std::fs::read_to_string(project.join("jackdaw.toml")).expect("a jackdaw.toml"),

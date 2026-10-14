@@ -480,7 +480,11 @@ pub(crate) fn build_3d_presentation(world: &mut World, parent: Entity) -> Entity
             MainViewportCamera,
             crate::EditorEntity,
             jackdaw_terrain::render::DetailViewer,
-            Camera3d::default(),
+            // Bevy 0.20 made screen-space transmission opt-in per camera.
+            (
+                Camera3d::default(),
+                bevy::pbr::ScreenSpaceTransmission::default(),
+            ),
             EnvironmentMapLight {
                 diffuse_map: env_diffuse,
                 specular_map: env_specular,
@@ -666,7 +670,7 @@ fn find_descendant_with<T: Component>(world: &mut World, root: Entity) -> Option
 /// leaf rebuilt by reconciler, workspace switch), tear down the
 /// camera that was spawned for it.
 pub(crate) fn on_viewport_panel_despawn(
-    trigger: On<Despawn, ViewportPanelHost>,
+    trigger: On<Despawn<ViewportPanelHost>>,
     hosts: Query<&ViewportPanelHost>,
     mut commands: Commands,
 ) {
@@ -686,7 +690,7 @@ pub(crate) fn on_viewport_panel_despawn(
 
 /// Handle files dropped from the Project window onto the viewport.
 fn handle_viewport_drop(
-    event: On<Pointer<DragDrop>>,
+    event: On<PointerDragDrop>,
     file_items: Query<&FileBrowserItem>,
     parents: Query<&ChildOf>,
     cursor: UiCursorPos,
@@ -1117,7 +1121,7 @@ pub struct CameraBookmark {
 }
 
 /// Watch for save/load camera bookmark keypresses and dispatch the
-/// corresponding op with a `slot` param. BEI bindings can't carry
+/// corresponding op with a `slot` param. Key bindings can't carry
 /// payloads, so the slot index lives in a sidecar trigger system.
 fn camera_bookmark_keys(
     keyboard: Res<ButtonInput<KeyCode>>,

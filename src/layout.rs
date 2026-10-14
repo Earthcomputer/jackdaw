@@ -257,7 +257,7 @@ fn window_title_bar_content(
 
 /// Play / Pause / Stop transport pill. Clicking a button triggers
 /// the corresponding `PiePlugin` handler. The plugin installs a
-/// click observer on each `PieButton` via an `On<Add, PieButton>`
+/// click observer on each `PieButton` via an `On<Add<PieButton>>`
 /// observer, so wiring here is purely presentation.
 fn play_pause_controls(icon_font: Handle<Font>) -> impl Bundle {
     (
@@ -384,27 +384,28 @@ pub(crate) fn toolbar() -> impl Scene {
             width: percent(100),
             height: px(tokens::TOOLBAR_HEIGHT),
             border: UiRect::all(px(1.0)),
-            border_radius: BorderRadius {
-                top_left: px(tokens::TOOLBAR_RADIUS),
-                top_right: px(tokens::TOOLBAR_RADIUS),
-                bottom_left: px(0.0),
-                bottom_right: px(0.0),
-            },
+            border_radius: BorderRadius::top(px(tokens::TOOLBAR_RADIUS)),
             flex_shrink: 0.0,
         }
         BackgroundColor(tokens::PANEL_HEADER_BG)
         BorderColor::all(tokens::TOOLBAR_BORDER)
         Children [
-            toolbar_tools(),
+            @toolbar_tools()
+            --
             // Spacer pushes the grid / snap widget to the right edge.
-            toolbar_spacer(),
+            @toolbar_spacer()
+            --
             // Grid-size stepper: current size between decrease / increase.
-            toolbar_op_button(GridDecreaseOp::ID, Icon::Minus),
-            grid_size_label(),
-            toolbar_op_button(GridIncreaseOp::ID, Icon::Plus),
-            toolbar_separator(),
+            @toolbar_op_button(GridDecreaseOp::ID, Icon::Minus)
+            --
+            @grid_size_label()
+            --
+            @toolbar_op_button(GridIncreaseOp::ID, Icon::Plus)
+            --
+            @toolbar_separator()
+            --
             // Grid-snap toggle; highlights while snapping is on.
-            toolbar_op_button(GridToggleSnapOp::ID, Icon::Magnet),
+            @toolbar_op_button(GridToggleSnapOp::ID, Icon::Magnet)
         ]
     }
 }
@@ -425,21 +426,34 @@ fn toolbar_tools() -> impl Scene {
             overflow: Overflow::clip_x(),
         }
         Children [
-            toolbar_op_button(ToolSelectOp::ID, Icon::MousePointer),
-            toolbar_op_button(ToolTranslateOp::ID, Icon::Move3d),
-            toolbar_op_button(ToolRotateOp::ID, Icon::Rotate3d),
-            toolbar_op_button(ToolScaleOp::ID, Icon::Scale3d),
-            toolbar_separator(),
+            @toolbar_op_button(ToolSelectOp::ID, Icon::MousePointer)
+            --
+            @toolbar_op_button(ToolTranslateOp::ID, Icon::Move3d)
+            --
+            @toolbar_op_button(ToolRotateOp::ID, Icon::Rotate3d)
+            --
+            @toolbar_op_button(ToolScaleOp::ID, Icon::Scale3d)
+            --
+            @toolbar_separator()
+            --
             // Gizmo space toggle. Active highlight = `Local`; default
             // = `World`. Tooltip is the discoverability path.
-            toolbar_op_button(GizmoSpaceToggleOp::ID, Icon::Globe),
-            toolbar_separator(),
-            toolbar_op_button(ActivateDrawBrushModalOp::ID, Icon::Box),
-            toolbar_op_button(MeasureDistanceOp::ID, Icon::RulerDimensionLine),
-            toolbar_op_button(EditModeVertexOp::ID, Icon::CircleDot),
-            toolbar_op_button(EditModeEdgeOp::ID, Icon::GitCommitHorizontal),
-            toolbar_op_button(EditModeFaceOp::ID, Icon::Hexagon),
-            toolbar_op_button(EditModeClipOp::ID, Icon::ScissorsLineDashed),
+            @toolbar_op_button(GizmoSpaceToggleOp::ID, Icon::Globe)
+            --
+            @toolbar_separator()
+            --
+            @toolbar_op_button(ActivateDrawBrushModalOp::ID, Icon::Box)
+            --
+            @toolbar_op_button(MeasureDistanceOp::ID, Icon::RulerDimensionLine)
+            --
+            @toolbar_op_button(EditModeVertexOp::ID, Icon::CircleDot)
+            --
+            @toolbar_op_button(EditModeEdgeOp::ID, Icon::GitCommitHorizontal)
+            --
+            @toolbar_op_button(EditModeFaceOp::ID, Icon::Hexagon)
+            --
+            @toolbar_op_button(EditModeClipOp::ID, Icon::ScissorsLineDashed)
+            --
             {physics_tool_buttons()}
         ]
     }
@@ -448,10 +462,11 @@ fn toolbar_tools() -> impl Scene {
 /// The physics tool's toolbar group.
 #[cfg(feature = "physics")]
 fn physics_tool_buttons() -> impl SceneList {
-    bsn_list![
-        toolbar_separator(),
-        toolbar_op_button(crate::physics_tool::PhysicsActivateOp::ID, Icon::Zap),
-    ]
+    bsn_list! {
+        @toolbar_separator()
+        --
+        @toolbar_op_button(crate::physics_tool::PhysicsActivateOp::ID, Icon::Zap)
+    }
 }
 
 /// Nothing: the editor was built without physics.
@@ -544,7 +559,7 @@ pub fn update_grid_size_label(
 /// it into the operator-button glue in `core_extension`, which dispatches
 /// on `Activate`, auto-disables via `InteractionDisabled` when the
 /// operator is unavailable, and attaches the operator tooltip on hover
-/// through the `On<Add, ButtonOperatorCall>` observer.
+/// through the `On<Add<ButtonOperatorCall>>` observer.
 ///
 /// Starts in the `Plain` variant so idle buttons read flat against the
 /// toolbar panel; [`update_toolbar_button_variants`] flips the active
@@ -553,7 +568,7 @@ fn toolbar_op_button(op_id: &'static str, icon: Icon) -> impl Scene {
     let glyph = String::from(icon.unicode());
     bsn! {
         @FeathersToolButton {
-            @caption: bsn! { icon_scene(glyph, TOOLBAR_ICON_PX) },
+            @caption: bsn! { @icon_scene(glyph, TOOLBAR_ICON_PX) },
             @variant: {ButtonVariant::Plain}
         }
         ButtonOperatorCall::new(op_id)
@@ -623,7 +638,7 @@ pub fn hierarchy_content(icon_font: Handle<Font>) -> impl Bundle {
             (
                 crate::add_entity_picker::AddEntityButton,
                 button(ButtonProps::new("").align_left()),
-                observe(|mut click: On<Pointer<Click>>, mut commands: Commands| {
+                observe(|mut click: On<PointerClick>, mut commands: Commands| {
                     click.propagate(false);
                     commands.queue(|world: &mut World| {
                         world.run_system_cached(crate::add_entity_picker::open_add_entity_picker)
@@ -974,7 +989,7 @@ pub fn inspector_components_content(icon_font: Handle<Font>) -> impl Bundle {
         },
         children![
             // Strip mount: the category tab rail is spawned here by the
-            // On<Add, InspectorCategoryStripMount> observer in InspectorPlugin.
+            // On<Add<InspectorCategoryStripMount>> observer in InspectorPlugin.
             (crate::inspector::category_strip::InspectorCategoryStripMount,),
             // Content column: add-header + search header + scrollable card list.
             (
@@ -1083,7 +1098,7 @@ fn save_to_scene_button(icon_font: Handle<Font>) -> impl Bundle {
                 TextColor(tokens::TEXT_PRIMARY),
             ),
         ],
-        observe(|_: On<Pointer<Click>>, mut commands: Commands| {
+        observe(|_: On<PointerClick>, mut commands: Commands| {
             commands.queue(|world: &mut World| {
                 if crate::pie::can_save_live_to_scene(world) {
                     crate::pie::save_live_entity_to_scene(world);
@@ -1404,7 +1419,7 @@ fn pie_instance_cycle_button() -> impl Bundle {
         PieInstanceCycleButton,
         // Hidden until Live mode; the appearance system flips this.
         button(ButtonProps::new("").hidden()),
-        observe(|_: On<Pointer<Click>>, mut commands: Commands| {
+        observe(|_: On<PointerClick>, mut commands: Commands| {
             commands.queue(|world: &mut World| {
                 cycle_focused_instance(world);
             });
@@ -1514,7 +1529,7 @@ fn window_mode_button() -> impl Bundle {
         WindowModeButton,
         button(ButtonProps::new("")),
         jackdaw_feathers::tooltip::Tooltip::title("Game window: embedded or separate window"),
-        observe(|_: On<Pointer<Click>>, mut commands: Commands| {
+        observe(|_: On<PointerClick>, mut commands: Commands| {
             commands
                 .operator(PieWindowModeToggleOp::ID)
                 .settings(CallOperatorSettings {

@@ -459,6 +459,9 @@ jobs:
       - name: Check the BSN parser matches its grammar
         run: cargo xtask bsn-parser --check
 
+      - name: Check the core crates depend on no third-party Bevy crate
+        run: cargo xtask core-deps
+
   # The lightyear backend is its own workspace so the editor never resolves
   # lightyear; it is linted and tested here instead.
   lightyear:
@@ -471,38 +474,61 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # An integration whose upstream has no release on this Bevy states why
+      # in `package.metadata.jackdaw.unavailable`; the job reports that as a
+      # warning instead of building it.
+      - name: Read availability
+        id: availability
+        run: |
+          reason=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["package"].get("metadata", {}).get("jackdaw", {}).get("unavailable", ""))' "$MANIFEST")
+          if [ -n "$reason" ]; then
+            echo "::warning title=Lightyear integration unavailable::$reason"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Rust toolchain
+        if: steps.availability.outputs.available == 'true'
         uses: dtolnay/rust-toolchain@master
         with:
           components: clippy, rustfmt
           toolchain: ${{ env.toolchain }}
 
       - name: Activate CI cargo config
+        if: steps.availability.outputs.available == 'true'
         run: mv .cargo/config_ci.toml .cargo/config.toml
 
       - name: Install cargo binstall
+        if: steps.availability.outputs.available == 'true'
         uses: cargo-bins/cargo-binstall@main
 
       - name: Install Wild
+        if: steps.availability.outputs.available == 'true'
         run: cargo binstall wild-linker --locked --force
 
       - name: Install dependencies
+        if: steps.availability.outputs.available == 'true'
         run: sudo rm -f /etc/apt/sources.list.d/google-chrome* /etc/apt/sources.list.d/microsoft-prod*; sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30; sudo apt-get install -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 --no-install-recommends libasound2-dev libudev-dev libwayland-dev
         timeout-minutes: 10
 
       - name: Populate target directory from cache
+        if: steps.availability.outputs.available == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: integrations/jackdaw_multiplayer_lightyear
 
       - name: Run cargo fmt
+        if: steps.availability.outputs.available == 'true'
         run: cargo fmt --manifest-path "$MANIFEST" --all -- --check
 
       - name: Run clippy lints
+        if: steps.availability.outputs.available == 'true'
         run: cargo clippy --locked --manifest-path "$MANIFEST" --all-targets -- --deny warnings
 
       - name: Run tests
+        if: steps.availability.outputs.available == 'true'
         run: cargo test --locked --manifest-path "$MANIFEST"
 
   # Check formatting.
@@ -564,7 +590,7 @@ jobs:
     # bevy_lint builds against rustc internals, so it runs on the nightly
     # its pinned revision requires rather than the workspace toolchain.
     env:
-      RUSTUP_TOOLCHAIN: nightly-2026-03-05
+      RUSTUP_TOOLCHAIN: nightly-2026-04-16
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -573,7 +599,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           components: rustc-dev, llvm-tools-preview
-          toolchain: nightly-2026-03-05
+          toolchain: nightly-2026-04-16
 
       - name: Install dependencies
         run: sudo rm -f /etc/apt/sources.list.d/google-chrome* /etc/apt/sources.list.d/microsoft-prod*; sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30; sudo apt-get install -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 --no-install-recommends libasound2-dev libudev-dev libwayland-dev
@@ -583,7 +609,7 @@ jobs:
         # Pinned to a known-good commit: installing from a release tag requires that
         # release's exact nightly, while unpinned HEAD lets upstream regressions
         # break CI without any code change in this repo.
-        run: cargo install --git https://github.com/TheBevyFlock/bevy_cli --rev 6e65200ca13b89c212499324513248db46d0edc7 --locked bevy_lint
+        run: cargo install --git https://github.com/TheBevyFlock/bevy_cli --rev df790973d6df86d4b8e041eda1043ff90138b01f --locked bevy_lint
 
       - name: Active CI cargo config
         run: mv .cargo/config_ci.toml .cargo/config.toml
@@ -594,5 +620,7 @@ jobs:
       - name: Install Wild
         run: cargo binstall wild-linker --locked --force
 
+      # Bevy 0.20 states rust-version 1.97.1, newer than any nightly a
+      # bevy_lint revision builds on yet.
       - name: Run Bevy linter
-        run: bevy_lint --locked --workspace --all-targets --features bevy/dynamic_linking
+        run: bevy_lint --locked --ignore-rust-version --workspace --all-targets --features bevy/dynamic_linking

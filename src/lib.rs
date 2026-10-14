@@ -200,7 +200,6 @@ use bevy::{
     platform::collections::HashMap,
     prelude::*,
 };
-use bevy_enhanced_input::prelude::EnhancedInputPlugin;
 use jackdaw_api::prelude::*;
 use jackdaw_api_internal::{
     ToAnchorId as _,
@@ -224,14 +223,11 @@ pub mod prelude {
     };
     pub use jackdaw_api::prelude::*;
 
-    // Ambient plugins re-exported so binaries can write
-    // `add_plugins((PhysicsPlugins::default(), EnhancedInputPlugin))`
-    // without direct deps on avian3d / bevy_enhanced_input.
-    // Editor plugins assert presence rather than adding, so user
-    // code can add the same plugins without conflict.
+    // Re-exported so binaries can write `add_plugins(PhysicsPlugins::default())`
+    // without a direct dep on avian3d. Editor plugins assert presence rather
+    // than adding, so user code can add the same plugin without conflict.
     #[cfg(feature = "physics")]
     pub use avian3d::prelude::PhysicsPlugins;
-    pub use bevy_enhanced_input::prelude::EnhancedInputPlugin;
 }
 
 /// System set for all editor interaction systems (input handling, viewport clicks,
@@ -368,11 +364,9 @@ pub struct EditorCorePlugin;
 
 impl Plugin for EditorCorePlugin {
     fn build(&self, app: &mut App) {
-        debug_assert!(
-            app.is_plugin_added::<EnhancedInputPlugin>(),
-            "EditorCorePlugin requires EnhancedInputPlugin first; \
-             add `EnhancedInputPlugin` in main.rs before JackdawEditorPlugins."
-        );
+        if !app.is_plugin_added::<jackdaw_input::InputActionPlugin>() {
+            app.add_plugins(jackdaw_input::InputActionPlugin);
+        }
         app.init_state::<AppState>();
         jackdaw_runtime::propagate_into_reused_indices(app);
         // A game whose own UI is built on feathers adds the group itself,
@@ -710,8 +704,8 @@ impl ExtensionPlugin {
 
 impl Plugin for ExtensionPlugin {
     fn build(&self, app: &mut App) {
-        // Extension registration runs during `build()` so BEI's
-        // `finish()` hook sees every context type. Built-ins override
+        // Extension registration runs during `build()`, before any plugin's
+        // `finish()`. Built-ins override
         // `kind()` to `Builtin`; user-supplied extensions default to
         // `Custom`.
         use jackdaw_api_internal::lifecycle::ExtensionAppExt as _;
@@ -772,26 +766,26 @@ fn rebuild_menu_if_dirty(world: &mut World) {
     }
 }
 
-fn flag_menu_dirty_on_window_add(_: On<Add, RegisteredWindow>, mut dirty: ResMut<MenuBarDirty>) {
+fn flag_menu_dirty_on_window_add(_: On<Add<RegisteredWindow>>, mut dirty: ResMut<MenuBarDirty>) {
     dirty.0 = true;
 }
 
 fn flag_menu_dirty_on_window_remove(
-    _: On<Remove, RegisteredWindow>,
+    _: On<Remove<RegisteredWindow>>,
     mut dirty: ResMut<MenuBarDirty>,
 ) {
     dirty.0 = true;
 }
 
 fn flag_menu_dirty_on_menu_entry_add(
-    _: On<Add, RegisteredMenuEntry>,
+    _: On<Add<RegisteredMenuEntry>>,
     mut dirty: ResMut<MenuBarDirty>,
 ) {
     dirty.0 = true;
 }
 
 fn flag_menu_dirty_on_menu_entry_remove(
-    _: On<Remove, RegisteredMenuEntry>,
+    _: On<Remove<RegisteredMenuEntry>>,
     mut dirty: ResMut<MenuBarDirty>,
 ) {
     dirty.0 = true;
@@ -2023,7 +2017,7 @@ impl jackdaw_commands::EditorCommand for SpawnKeyframeCmd {
 /// Propagation is stopped so the click doesn't also hit the
 /// scrubber and seek the playhead.
 fn on_timeline_keyframe_click(
-    mut event: On<Pointer<Click>>,
+    mut event: On<PointerClick>,
     handles: Query<&jackdaw_animation::TimelineKeyframeHandle>,
     keys: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<selection::Selection>,
@@ -3066,14 +3060,14 @@ pub(crate) fn open_recent_dialog(world: &mut World) {
 
         // Hover effects
         world.commands().entity(row).observe(
-            |hover: On<Pointer<Over>>, mut bg: Query<&mut BackgroundColor>| {
+            |hover: On<PointerOver>, mut bg: Query<&mut BackgroundColor>| {
                 if let Ok(mut bg) = bg.get_mut(hover.event_target()) {
                     bg.0 = jackdaw_feathers::tokens::HOVER_BG;
                 }
             },
         );
         world.commands().entity(row).observe(
-            |out: On<Pointer<Out>>, mut bg: Query<&mut BackgroundColor>| {
+            |out: On<PointerOut>, mut bg: Query<&mut BackgroundColor>| {
                 if let Ok(mut bg) = bg.get_mut(out.event_target()) {
                     bg.0 = jackdaw_feathers::tokens::TOOLBAR_BG;
                 }
@@ -3081,8 +3075,10 @@ pub(crate) fn open_recent_dialog(world: &mut World) {
         );
 
         // Click: open the project
-        world.commands().entity(row).observe(
-            move |_: On<Pointer<Click>>, mut commands: Commands| {
+        world
+            .commands()
+            .entity(row)
+            .observe(move |_: On<PointerClick>, mut commands: Commands| {
                 let path = path.clone();
                 commands.insert_resource(project_select::PendingAutoOpen {
                     path: path.clone(),
@@ -3097,8 +3093,7 @@ pub(crate) fn open_recent_dialog(world: &mut World) {
                             .set(AppState::ProjectSelect);
                     }
                 });
-            },
-        );
+            });
 
         world.commands().entity(slot_entity).add_child(row);
     }

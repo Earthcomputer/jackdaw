@@ -144,17 +144,15 @@ fn main() -> AppExit {
                 address_mode_w: ImageAddressMode::Repeat,
                 ..ImageSamplerDescriptor::linear()
             },
+            // Bevy 0.19 processed PNGs only; JPEGs stay raw as before.
+            default_compressed_image_processor_extensions: vec!["png".into()],
         })
         // `editor_window_plugin` disables Bevy's default
         // window-close -> AppExit wiring so `intercept_window_close`
         // in ScenesPlugin owns the exit path, and it honors
         // `JACKDAW_WINDOW_SIZE`. Spelling its fields out here instead
         // would drop that override.
-        .set(editor_window_plugin())
-        // Its overlay inserts on every camera through a command
-        // buffer with no ordering against the dock reconciler, which
-        // despawns a rebuilt panel's cameras in the same frame.
-        .disable::<bevy::dev_tools::render_debug::RenderDebugOverlayPlugin>();
+        .set(editor_window_plugin());
     if let Some(render_plugin) = render_plugin {
         default_plugins = default_plugins.set(render_plugin);
     }
@@ -187,12 +185,7 @@ fn main() -> AppExit {
         // The default error handler panics, which we never *ever*
         // want to happen to the editor. Log an error instead.
         .set_error_handler(error_handler)
-        .add_plugins(default_plugins)
-        // Ambient plugins added next to `DefaultPlugins`. The
-        // editor's `EditorCorePlugin` and `PhysicsSimulationPlugin`
-        // assert presence, so user `MyGamePlugin`s can add the
-        // same plugins without conflict.
-        .add_plugins(bevy_enhanced_input::prelude::EnhancedInputPlugin);
+        .add_plugins(default_plugins);
     #[cfg(feature = "physics")]
     if std::env::var_os("JD_PERF_NO_PHYSICS").is_none() {
         app.add_plugins(avian3d::prelude::PhysicsPlugins::default());

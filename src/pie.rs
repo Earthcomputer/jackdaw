@@ -138,11 +138,11 @@ pub struct PieSession {
 }
 
 impl Drop for PieSession {
-    /// A clean editor shutdown (window close) drops the `World` and so this
-    /// resource; take the running games down with it. Hard kills that skip
-    /// destructors (Ctrl+C calls `process::exit`, SIGKILL skips everything) are
-    /// covered by the game itself, which exits once its link to the editor
-    /// closes, and on Linux and Windows by the kernel as well.
+    /// A clean editor shutdown (window close or Ctrl+C) drops the `World` and
+    /// so this resource; take the running games down with it. Hard kills that
+    /// skip destructors (SIGKILL skips everything) are covered by the game
+    /// itself, which exits once its link to the editor closes, and on Linux
+    /// and Windows by the kernel as well.
     fn drop(&mut self) {
         for (_key, mut stage) in self.children.drain() {
             match &mut stage {
@@ -1931,9 +1931,8 @@ fn spawn_instance(
     }
 
     // Ask the kernel to SIGKILL this child when the editor (its parent) dies by
-    // any means -- including a SIGKILL the editor can never trap, or the
-    // `process::exit` the Ctrl+C handler takes (which skips `Drop`). Without
-    // this, killing the editor leaves the games running.
+    // any means -- including a SIGKILL the editor can never trap, which skips
+    // `Drop`. Without this, killing the editor leaves the games running.
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::process::CommandExt;

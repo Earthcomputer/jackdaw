@@ -167,7 +167,6 @@ path-slash.workspace = true
 dunce = "1.0.5"
 flate2 = "1"
 notify = "8"
-ctrlc = "3"
 toml = "1"
 winit.workspace = true
 image.workspace = true

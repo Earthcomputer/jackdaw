@@ -536,23 +536,6 @@ impl Plugin for EditorCorePlugin {
         .add_plugins(live_edits_ui::LiveEditsUiPlugin)
         .add_plugins(pie_menu::PieMenuPlugin)
         .add_plugins(dock_ops::DockOpsPlugin)
-        // Force-exit on `AppExit`: bypass wgpu device cleanup
-        // and AsyncComputeTaskPool shutdown that otherwise hang
-        // the process after window close. Hosted here so every
-        // editor binary (launcher + user `cargo editor`) gets
-        // the same shutdown behaviour.
-        .add_systems(
-            Last,
-            |mut events: bevy::ecs::message::MessageReader<AppExit>| {
-                if let Some(exit) = events.read().next() {
-                    let code = match exit {
-                        AppExit::Success => 0,
-                        AppExit::Error(c) => c.get() as i32,
-                    };
-                    std::process::exit(code);
-                }
-            },
-        )
         .add_systems(Startup, (register_workspaces, sync_icon_font))
         .configure_sets(
             Update,

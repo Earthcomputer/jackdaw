@@ -99,7 +99,9 @@ fn activating_a_row_dispatches_its_action() {
 fn activating_a_row_closes_the_menu() {
     let mut app = util::editor_test_app();
     let (menu, rows) = open_menu(&mut app, &[("rename", "Rename")]);
-    app.world_mut().resource_mut::<ContextMenuState>().menu_entity = Some(menu);
+    app.world_mut()
+        .resource_mut::<ContextMenuState>()
+        .menu_entity = Some(menu);
 
     app.world_mut().trigger(Activate { entity: rows[0] });
     app.update();

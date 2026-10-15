@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use bevy::ui_widgets::{Activate, MenuItem, MenuPopup};
 
 use jackdaw_feathers::context_menu::spawn_context_menu;
-use jackdaw_widgets::context_menu::ContextMenuAction;
+use jackdaw_widgets::context_menu::{ContextMenuAction, ContextMenuState};
 
 fn open_menu(app: &mut App, items: &[(&str, &str)]) -> (Entity, Vec<Entity>) {
     let mut queue = CommandQueue::default();
@@ -91,5 +91,26 @@ fn activating_a_row_dispatches_its_action() {
         fired.lock().expect("no other thread holds it").as_slice(),
         ["delete".to_string()],
         "the row that was activated is the action that fired",
+    );
+}
+
+/// Activating a row closes the menu it sits in.
+#[test]
+fn activating_a_row_closes_the_menu() {
+    let mut app = util::editor_test_app();
+    let (menu, rows) = open_menu(&mut app, &[("rename", "Rename")]);
+    app.world_mut().resource_mut::<ContextMenuState>().menu_entity = Some(menu);
+
+    app.world_mut().trigger(Activate { entity: rows[0] });
+    app.update();
+
+    assert!(
+        app.world().get_entity(menu).is_err(),
+        "the menu is gone once a row is chosen",
+    );
+    assert_eq!(
+        app.world().resource::<ContextMenuState>().menu_entity,
+        None,
+        "and the state no longer points at it",
     );
 }

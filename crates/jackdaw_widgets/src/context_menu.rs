@@ -1,4 +1,6 @@
+use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
 use jackdaw_input::{Condition, Fire, InputContext, actions, bindings};
 
 /// System set containing the context menu close systems.
@@ -16,6 +18,7 @@ impl Plugin for ContextMenuPlugin {
             close_context_menu_on_click.in_set(ContextMenuCloseSystems),
         )
         .add_observer(close_context_menu_on_escape)
+        .add_observer(close_context_menu_on_item_activate)
         .add_systems(Startup, spawn_context_menu_input_context);
     }
 }
@@ -72,6 +75,11 @@ pub struct ContextMenuState {
 
 /// Close context menu when clicking outside it.
 ///
+/// A press inside the menu is left alone: its items activate on the
+/// release, so closing on the press would despawn the item before it
+/// could fire. Choosing an item closes the menu through
+/// [`close_context_menu_on_item_activate`] instead.
+///
 /// Only listens for LMB. Right-click is the open gesture and races
 /// the menu-open operator on the same frame; if this system also
 /// closed on RMB, the just-spawned menu would be torn down before
@@ -80,13 +88,19 @@ pub struct ContextMenuState {
 /// kind of cross-input race).
 fn close_context_menu_on_click(
     mouse: Res<ButtonInput<MouseButton>>,
+    hover_map: Option<Res<HoverMap>>,
+    parents: Query<&ChildOf>,
     mut commands: Commands,
     mut state: Option<ResMut<ContextMenuState>>,
 ) {
     let Some(ref mut state) = state else {
         return;
     };
-    if !should_close_on_pointer_press(&mouse, state) {
+    let pressed_inside_menu = match (state.menu_entity, hover_map) {
+        (Some(menu), Some(hover_map)) => is_hovering(menu, &hover_map, &parents),
+        _ => false,
+    };
+    if !should_close_on_pointer_press(&mouse, state, pressed_inside_menu) {
         return;
     }
     if let Some(menu) = state.menu_entity.take() {
@@ -95,18 +109,53 @@ fn close_context_menu_on_click(
     state.target_entity = None;
 }
 
+/// True when a mouse pointer is over `menu` or one of its descendants.
+fn is_hovering(menu: Entity, hover_map: &HoverMap, parents: &Query<&ChildOf>) -> bool {
+    hover_map
+        .iter()
+        .filter(|(pointer, _)| !pointer.is_custom())
+        .flat_map(|(_, hits)| hits.keys())
+        .any(|hovered| {
+            core::iter::successors(Some(*hovered), |entity| {
+                parents.get(*entity).ok().map(ChildOf::parent)
+            })
+            .any(|ancestor| ancestor == menu)
+        })
+}
+
 /// True when the LMB just-pressed input should drop a context menu
-/// (one is currently open). Pulled out so the regression test for
-/// the right-click-doesn't-self-close bug runs without spinning up
-/// a full `App`.
+/// (one is currently open and the press landed outside it). Pulled
+/// out so the regression tests for the self-closing bugs run without
+/// spinning up a full `App`.
 fn should_close_on_pointer_press(
     mouse: &ButtonInput<MouseButton>,
     state: &ContextMenuState,
+    pressed_inside_menu: bool,
 ) -> bool {
-    if state.menu_entity.is_none() {
+    if state.menu_entity.is_none() || pressed_inside_menu {
         return false;
     }
     mouse.just_pressed(MouseButton::Left)
+}
+
+/// Close the open menu once one of its items activates. The despawn is
+/// deferred, so the other `Activate` observers still see the item.
+fn close_context_menu_on_item_activate(
+    activate: On<Activate>,
+    items: Query<(), With<ContextMenuItem>>,
+    mut commands: Commands,
+    mut state: Option<ResMut<ContextMenuState>>,
+) {
+    if !items.contains(activate.entity) {
+        return;
+    }
+    let Some(ref mut state) = state else {
+        return;
+    };
+    if let Some(menu) = state.menu_entity.take() {
+        commands.entity(menu).despawn();
+    }
+    state.target_entity = None;
 }
 
 /// Close on Escape via the dismiss action. Routing through an action
@@ -152,7 +201,7 @@ mod tests {
         mouse.press(MouseButton::Right);
         let state = open_menu_state();
         assert!(
-            !should_close_on_pointer_press(&mouse, &state),
+            !should_close_on_pointer_press(&mouse, &state, false),
             "right-click is the open gesture; close must not fire on RMB",
         );
     }
@@ -165,7 +214,7 @@ mod tests {
         mouse.press(MouseButton::Left);
         let state = open_menu_state();
         assert!(
-            should_close_on_pointer_press(&mouse, &state),
+            should_close_on_pointer_press(&mouse, &state, false),
             "LMB-press should still close the menu",
         );
     }
@@ -179,6 +228,20 @@ mod tests {
         let mut mouse = ButtonInput::<MouseButton>::default();
         mouse.press(MouseButton::Left);
         let state = ContextMenuState::default();
-        assert!(!should_close_on_pointer_press(&mouse, &state));
+        assert!(!should_close_on_pointer_press(&mouse, &state, false));
+    }
+
+    /// Regression: menu items activate on release, so an LMB press on
+    /// an item must not close the menu, or the item is despawned before
+    /// its click completes and choosing it does nothing.
+    #[test]
+    fn lmb_press_inside_menu_does_not_close_it() {
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Left);
+        let state = open_menu_state();
+        assert!(
+            !should_close_on_pointer_press(&mouse, &state, true),
+            "a press on the menu's own items must leave it open",
+        );
     }
 }
